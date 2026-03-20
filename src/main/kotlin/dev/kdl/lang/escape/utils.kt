@@ -1,20 +1,92 @@
 package dev.kdl.lang.escape
 
-import com.intellij.psi.tree.IElementType
-import java.io.StringReader
 import java.util.stream.IntStream
 
 fun unescapeString(rawValue: String): String {
-    val lexer = KdlStringLexer(StringReader(rawValue))
+    val result = StringBuilder(rawValue.length)
+    var index = 0
 
-    return tokenize(lexer)
-        .joinToString(separator = "") {
-            val (type, text) = it
-            when (type) {
-                EscapeType.NOT_ESCAPE -> text
-                else -> decodeEscape(text)
+    while (index < rawValue.length) {
+        val ch = rawValue[index]
+        if (ch != '\\' || index + 1 >= rawValue.length) {
+            result.append(ch)
+            index++
+            continue
+        }
+
+        val next = rawValue[index + 1]
+        when (next) {
+            'n' -> {
+                result.append('\n')
+                index += 2
+            }
+            'r' -> {
+                result.append('\r')
+                index += 2
+            }
+            't' -> {
+                result.append('\t')
+                index += 2
+            }
+            '\\' -> {
+                result.append('\\')
+                index += 2
+            }
+            '/' -> {
+                result.append('/')
+                index += 2
+            }
+            '"' -> {
+                result.append('"')
+                index += 2
+            }
+            'b' -> {
+                result.append('\u0008')
+                index += 2
+            }
+            'f' -> {
+                result.append('\u000C')
+                index += 2
+            }
+            's' -> {
+                result.append(' ')
+                index += 2
+            }
+            'u' -> {
+                val end = rawValue.indexOf('}', index + 2)
+                if (end > index + 3 && rawValue.getOrNull(index + 2) == '{') {
+                    val codePoint = rawValue.substring(index + 3, end).toInt(16)
+                    result.appendCodePoint(codePoint)
+                    index = end + 1
+                } else {
+                    result.append('\\')
+                    index++
+                }
+            }
+            else -> {
+                if (isEscapedWhitespace(next)) {
+                    index += 2
+                    while (index < rawValue.length) {
+                        val current = rawValue[index]
+                        if (isEscapedWhitespace(current)) {
+                            index++
+                            continue
+                        }
+                        if (current == '\r' || current == '\n') {
+                            index = normalizedNewlineEnd(rawValue, index)
+                            continue
+                        }
+                        break
+                    }
+                } else {
+                    result.append(next)
+                    index += 2
+                }
             }
         }
+    }
+
+    return result.toString()
 }
 
 fun escapeString(rawValue: String): String {
@@ -37,37 +109,12 @@ fun escapeString(rawValue: String): String {
     return String(codepoints, 0, codepoints.size)
 }
 
-private fun tokenize(lexer: KdlStringLexer): Sequence<Pair<IElementType, CharSequence>> =
-    generateSequence {
-        val escapeType = lexer.advance() ?: return@generateSequence null
-        escapeType to lexer.yytext()
-    }
-
-
-private fun decodeEscape(esc: CharSequence): String = when (esc) {
-    "\\n" -> "\n"
-    "\\r" -> "\r"
-    "\\t" -> "\t"
-    "\\\\" -> "\\"
-    "\\/" -> "/"
-    "\\\"" -> "\""
-    "\\b" -> "\u0008"
-    "\\f" -> "\u000C"
-
-    else -> {
-        assert(esc.length >= 2)
-        assert(esc[0] == '\\')
-        when (esc[1]) {
-            'u' -> decodeUnicodeEscape(esc)
-            else -> error("unreachable")
-        }
-    }
+private fun isEscapedWhitespace(ch: Char): Boolean = when (ch) {
+    '\t', ' ', '\u00A0', '\u1680',
+    '\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006', '\u2007',
+    '\u2008', '\u2009', '\u200A', '\u202F', '\u205F', '\u3000' -> true
+    else -> false
 }
 
-private fun decodeUnicodeEscape(esc: CharSequence): String {
-    val cleanTextValue = esc.substring(3, esc.length - 1)
-
-    return Integer.parseInt(cleanTextValue, 16)
-        .toChar()
-        .toString()
-}
+private fun normalizedNewlineEnd(text: String, index: Int): Int =
+    if (text[index] == '\r' && text.getOrNull(index + 1) == '\n') index + 2 else index + 1

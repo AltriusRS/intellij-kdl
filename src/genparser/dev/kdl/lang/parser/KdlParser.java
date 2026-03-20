@@ -36,9 +36,22 @@ public class KdlParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // node-list
+  // version-marker? node-list
   static boolean File(PsiBuilder builder_, int level_) {
-    return node_list(builder_, level_ + 1);
+    if (!recursion_guard_(builder_, level_, "File")) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = File_0(builder_, level_ + 1);
+    result_ = result_ && node_list(builder_, level_ + 1);
+    exit_section_(builder_, marker_, null, result_);
+    return result_;
+  }
+
+  // version-marker?
+  private static boolean File_0(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "File_0")) return false;
+    version_marker(builder_, level_ + 1);
+    return true;
   }
 
   /* ********************************************************** */
@@ -543,12 +556,13 @@ public class KdlParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // NEWLINE | ';' | <<eof>>
+  // NEWLINE | SINGLE_LINE_COMMENT | ';' | <<eof>>
   public static boolean node_terminator(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "node_terminator")) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_, level_, _NONE_, NODE_TERMINATOR, "<node terminator>");
     result_ = consumeToken(builder_, NEWLINE);
+    if (!result_) result_ = consumeToken(builder_, SINGLE_LINE_COMMENT);
     if (!result_) result_ = consumeToken(builder_, SEMI);
     if (!result_) result_ = eof(builder_, level_ + 1);
     exit_section_(builder_, level_, marker_, result_, false, null);
@@ -705,6 +719,61 @@ public class KdlParser implements PsiParser, LightPsiParser {
   // UNICODE_SPACE
   static boolean ws(PsiBuilder builder_, int level_) {
     return consumeToken(builder_, UNICODE_SPACE);
+  }
+
+  /* ********************************************************** */
+  // '/-' ws* BARE_IDENTIFIER ws+ DECIMAL_LITERAL ws* NEWLINE
+  static boolean version_marker(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "version_marker")) return false;
+    if (!nextTokenIs(builder_, SLASHDASH)) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = consumeToken(builder_, SLASHDASH);
+    result_ = result_ && version_marker_1(builder_, level_ + 1);
+    result_ = result_ && consumeToken(builder_, BARE_IDENTIFIER);
+    result_ = result_ && version_marker_3(builder_, level_ + 1);
+    result_ = result_ && consumeToken(builder_, DECIMAL_LITERAL);
+    result_ = result_ && version_marker_5(builder_, level_ + 1);
+    result_ = result_ && consumeToken(builder_, NEWLINE);
+    exit_section_(builder_, marker_, null, result_);
+    return result_;
+  }
+
+  // ws*
+  private static boolean version_marker_1(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "version_marker_1")) return false;
+    while (true) {
+      int pos_ = current_position_(builder_);
+      if (!ws(builder_, level_ + 1)) break;
+      if (!empty_element_parsed_guard_(builder_, "version_marker_1", pos_)) break;
+    }
+    return true;
+  }
+
+  // ws+
+  private static boolean version_marker_3(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "version_marker_3")) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = ws(builder_, level_ + 1);
+    while (result_) {
+      int pos_ = current_position_(builder_);
+      if (!ws(builder_, level_ + 1)) break;
+      if (!empty_element_parsed_guard_(builder_, "version_marker_3", pos_)) break;
+    }
+    exit_section_(builder_, marker_, null, result_);
+    return result_;
+  }
+
+  // ws*
+  private static boolean version_marker_5(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "version_marker_5")) return false;
+    while (true) {
+      int pos_ = current_position_(builder_);
+      if (!ws(builder_, level_ + 1)) break;
+      if (!empty_element_parsed_guard_(builder_, "version_marker_5", pos_)) break;
+    }
+    return true;
   }
 
 }

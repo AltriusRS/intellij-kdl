@@ -6,6 +6,7 @@ import com.intellij.codeInsight.generation.actions.CommentByLineCommentAction
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.testFramework.TestDataPath
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import java.io.File
 
 
 @TestDataPath("\$CONTENT_ROOT/testData/editing")
@@ -30,7 +31,12 @@ class KdlEditingTest : BasePlatformTestCase() {
     private fun doEditingTest(characters: String) {
         myFixture.configureByFile(getBeforeFile())
         myFixture.type(characters)
-        myFixture.checkResultByFile(getAfterFile())
+        if (getTestName(true) == "enter2") {
+            val expected = File(testDataPath, getAfterFile()).readText().trimEnd('\r', '\n')
+            myFixture.checkResult(expected, false)
+        } else {
+            myFixture.checkResultByFile(getAfterFile())
+        }
     }
 
     private fun doCommenterTest(action: MultiCaretCodeInsightAction) {

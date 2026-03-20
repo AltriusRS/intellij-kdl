@@ -22,6 +22,7 @@ import dev.kdl.lang.psi.*
 import dev.kdl.lang.psi.ext.KdlElementTypes
 import dev.kdl.lang.psi.ext.KdlElementTypes.BARE_IDENTIFIER
 import dev.kdl.lang.psi.ext.KdlElementTypes.RAW_STRING_LITERAL
+import dev.kdl.lang.psi.KdlElementFactory
 import dev.kdl.lang.psiElement
 import java.util.regex.Pattern
 
@@ -88,18 +89,26 @@ class KdlErrorAnnotator : Annotator {
                 ),
             )
 
-        // spec doesn't allow bare identifier in literal
+        // Bare identifiers as values are only valid in explicitly-versioned KDL v2 documents.
         val illegalBareIdentifierPattern: Capture<PsiElement> = psiElement(BARE_IDENTIFIER)
             .withParent(psiElement<KdlPsiLiteral>())
+            .with(object : PatternCondition<PsiElement>("notInKdlV2Document") {
+                override fun accepts(t: PsiElement, context: ProcessingContext?): Boolean = !usesKdlV2(t.containingFile)
+            })
 
         // spec doesn't allow whitespace or empty node terminator
         val missingNodeTerminatorPattern: Capture<KdlPsiNodeBlock> = psiElement<KdlPsiNodeBlock>()
             .andNot(psiElement().withLastChild(psiElement<KdlPsiNodeTerminator>()))
+            .with(object : PatternCondition<KdlPsiNodeBlock>("notAtEof") {
+                override fun accepts(t: KdlPsiNodeBlock, context: ProcessingContext?): Boolean {
+                    return t.nextSibling != null
+                }
+            })
 
         // in some cases hashes can be unbalanced, spec doesn't allow that
         val unbalancedHashesPattern: Capture<PsiElement> = psiElement(RAW_STRING_LITERAL)
             .withText(string().with(object : PatternCondition<String>("endsWith") {
-                val PATTERN = Pattern.compile("^r(?<starthash>#*)\".*\"(?<endhash>#*)$")
+                val PATTERN = Pattern.compile("^(?:r)?(?<starthash>#*)\"(?:.|\\R)*\"(?<endhash>#*)$")
                 override fun accepts(str: String, context: ProcessingContext): Boolean {
                     val matcher = PATTERN.matcher(str)
                     if (!matcher.find()) {
@@ -110,6 +119,10 @@ class KdlErrorAnnotator : Annotator {
                     return startHashes != endHashes
                 }
             }))
+
+        private val VERSION_MARKER = Regex("^\\uFEFF?/-\\s*kdl-version\\s+2(?:\\s|//.*)?(?:\\r\\n|\\r|\\n)")
+
+        private fun usesKdlV2(file: PsiFile): Boolean = VERSION_MARKER.containsMatchIn(file.text)
     }
 }
 

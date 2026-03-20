@@ -37,7 +37,7 @@ FILE(0,51)
               PsiElement(})('}')(50,51)
             KdlPsiNodeTerminatorImpl(NODE_TERMINATOR)(51,51)
               <empty list>
-          PsiErrorElement:';', <node block>, NEWLINE, UNICODE_SPACE, '\' or '}' expected(51,51)
+          PsiErrorElement:';', <node block>, NEWLINE, SINGLE_LINE_COMMENT, UNICODE_SPACE, '\' or '}' expected(51,51)
             <empty list>
         KdlPsiNodeTerminatorImpl(NODE_TERMINATOR)(51,51)
           <empty list>

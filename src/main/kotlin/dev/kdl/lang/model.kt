@@ -18,13 +18,14 @@ data class KdlArgument(val value: KdlTypedValue)
 
 data class KdlType(val name: String)
 
-class KdlTypedValue(val type: KdlType?, val value: KdlValue)
+data class KdlTypedValue(val type: KdlType?, val value: KdlValue)
 
 sealed interface KdlValue
 
-class KdlStringValue(val value: String) : KdlValue
-class KdlNumberValue(val value: BigDecimal) : KdlValue
-class KdlBooleanValue(val value: Boolean) : KdlValue
+data class KdlStringValue(val value: String) : KdlValue
+data class KdlNumberValue(val value: BigDecimal) : KdlValue
+data class KdlSpecialNumberValue(val keyword: String) : KdlValue
+data class KdlBooleanValue(val value: Boolean) : KdlValue
 object KdlNullValue : KdlValue
 
 
@@ -86,8 +87,10 @@ private fun nodeValueFromPsi(nodeValue: KdlPsiValue): KdlTypedValue? {
         is KdlLiteralKind.BooleanLiteral -> KdlBooleanValue(kind.value)
         is KdlLiteralKind.NullLiteral -> KdlNullValue
         is KdlLiteralKind.NumberLiteral -> {
-            kind.value
-                ?.let { KdlNumberValue(it) }
+            kind.keyword
+                ?.let { KdlSpecialNumberValue(it) }
+                ?: kind.value
+                    ?.let { KdlNumberValue(it) }
                 ?: return null
         }
         is StringLiteral -> KdlStringValue(kind.value)

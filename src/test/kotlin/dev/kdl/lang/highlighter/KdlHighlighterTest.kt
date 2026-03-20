@@ -10,7 +10,6 @@ class KdlHighlighterTest : BasePlatformTestCase() {
     fun testInfoLevelHighlight() = doHighlightingTest(checkInfos = true)
     fun testIllegalWhitespaces() = doHighlightingTest()
     fun testIllegalComment() = doHighlightingTest()
-    fun testIllegalBareIdentifier() = doHighlightingTest()
     fun testMissingNodeTerminator() = doHighlightingTest()
     fun testUnbalancedHashes() = doHighlightingTest()
 

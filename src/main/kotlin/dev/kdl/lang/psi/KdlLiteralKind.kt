@@ -9,40 +9,49 @@ import java.math.BigInteger
 
 sealed class KdlLiteralKind(val node: ASTNode) {
     class BooleanLiteral(node: ASTNode) : KdlLiteralKind(node) {
-        val value: Boolean = node.chars == "true"
+        val value: Boolean = node.chars.toString().removePrefix("#") == "true"
     }
 
     class NumberLiteral(node: ASTNode) : KdlLiteralKind(node) {
+        val rawText: String get() = node.text
+
         val value: BigDecimal? get() {
+            if (isKeywordNumber) {
+                return null
+            }
+
             val textValue = offsetsForNumber(node).substring(node.text)
-            val (start, radix) = when (textValue.take(2)) {
+            val negative = textValue.startsWith('-')
+            val cleanText = textValue.removePrefix("+").removePrefix("-")
+            val (start, radix) = when (cleanText.take(2)) {
                 "0x" -> 2 to 16
                 "0o" -> 2 to 8
                 "0b" -> 2 to 2
                 else -> 0 to 10
             }
 
-            val cleanTextValue = textValue.substring(start).filter { it != '_' }
+            val cleanTextValue = cleanText.substring(start).filter { it != '_' }
             return try {
                 if (radix == 10) {
-                    BigDecimal(cleanTextValue)
+                    BigDecimal(if (negative) "-$cleanTextValue" else cleanTextValue)
                 } else {
-                    BigInteger(cleanTextValue, radix).toBigDecimal()
+                    val integer = BigInteger(cleanTextValue, radix)
+                    (if (negative) integer.negate() else integer).toBigDecimal()
                 }
             } catch (e: NumberFormatException) {
                 null
             }
         }
+
+        val keyword: String? get() = rawText.takeIf { isKeywordNumber }
+
+        private val isKeywordNumber: Boolean
+            get() = rawText == "#inf" || rawText == "#-inf" || rawText == "#nan"
     }
 
     class StringLiteral(node: ASTNode) : KdlLiteralKind(node) {
         val value: String get() {
-            val rawValue = offsetsForText(node).substring(node.text)
-
-            return when (node.elementType) {
-                RAW_STRING_LITERAL -> rawValue
-                else -> unescapeString(rawValue)
-            }
+            return decodeStringLiteral(node)
         }
     }
 
@@ -63,7 +72,10 @@ sealed class KdlLiteralKind(val node: ASTNode) {
 }
 
 fun offsetsForNumber(node: ASTNode): TextRange {
-    val start = when (node.text.take(2)) {
+    val cleanText = node.text.removePrefix("+").removePrefix("-")
+    val offset = node.text.length - cleanText.length
+
+    val start = offset + when (cleanText.take(2)) {
         "0b" -> 2
         "0o" -> 2
         "0x" -> 2
@@ -74,18 +86,18 @@ fun offsetsForNumber(node: ASTNode): TextRange {
 }
 
 fun offsetsForText(node: ASTNode): TextRange {
-    when (node.elementType) {
-        RAW_STRING_LITERAL -> return offsetsForRawText(node)
+    return when {
+        isRawString(node.text) -> offsetsForRawText(node)
+        isMultilineString(node.text) -> TextRange(0, node.textLength)
+        else -> TextRange(1, node.textLength - 1)
     }
-
-    return TextRange(1, node.textLength - 1)
 }
 
 private fun offsetsForRawText(node: ASTNode): TextRange {
     val text = node.text
     val textLength = node.textLength
 
-    val prefixEnd = 1
+    val prefixEnd = if (text.startsWith("r")) 1 else 0
 
     val hashes = run {
         var pos = prefixEnd
@@ -122,3 +134,56 @@ private fun offsetsForRawText(node: ASTNode): TextRange {
 private inline fun doLocate(node: ASTNode, start: Int, locator: (Int) -> Int): Int =
     if (start >= node.textLength) start else locator(start)
 
+private fun decodeStringLiteral(node: ASTNode): String {
+    val text = node.text
+    return when {
+        isRawMultilineString(text) -> dedentMultilineString(extractMultilineBody(text, raw = true), raw = true)
+        isMultilineString(text) -> unescapeString(dedentMultilineString(extractMultilineBody(text, raw = false), raw = false))
+        isRawString(text) -> offsetsForRawText(node).substring(text)
+        else -> unescapeString(offsetsForText(node).substring(text))
+    }
+}
+
+private fun extractMultilineBody(text: String, raw: Boolean): String {
+    val quoteIndex = if (raw) text.indexOf("\"\"\"") else 0
+    val start = quoteIndex + 3
+    val end = text.lastIndexOf("\"\"\"")
+    return if (start <= end) text.substring(start, end) else ""
+}
+
+private fun dedentMultilineString(body: String, raw: Boolean): String {
+    val normalized = normalizeNewlines(body)
+    if (normalized.isEmpty() || normalized[0] != '\n') {
+        return if (raw) normalized else unescapeString(normalized)
+    }
+
+    val lastNewline = normalized.lastIndexOf('\n')
+    if (lastNewline < 0) {
+        return normalized
+    }
+
+    val indent = normalized.substring(lastNewline + 1)
+    val content = normalized.substring(1, lastNewline)
+    val lines = content.split('\n')
+
+    return lines.joinToString("\n") { line ->
+        if (line.startsWith(indent)) {
+            line.removePrefix(indent)
+        } else {
+            line
+        }
+    }
+}
+
+private fun normalizeNewlines(text: String): String =
+    text.replace("\r\n", "\n").replace('\r', '\n').replace('\u0085', '\n').replace('\u000C', '\n').replace('\u2028', '\n').replace('\u2029', '\n')
+
+private fun isRawString(text: String): Boolean = text.startsWith("r") || text.startsWith("#")
+
+private fun isMultilineString(text: String): Boolean =
+    text.startsWith("\"\"\"") || isRawMultilineString(text)
+
+private fun isRawMultilineString(text: String): Boolean {
+    val quoteIndex = text.indexOf("\"\"\"")
+    return quoteIndex > 0 && text.take(quoteIndex).all { it == '#' || it == 'r' }
+}
